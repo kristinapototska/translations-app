@@ -951,6 +951,13 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ pid: 
   const context = searchParams.get("context") ?? "";
   const channelId = searchParams.get("channel_id") ?? null;
 
+  // Validate product ID
+  if (!pid || isNaN(Number(pid))) {
+    return new Response("Invalid product ID", {
+      status: 400,
+    });
+  }
+
   if (!channelId) {
     return new Response("Channel ID missing", {
       status: 422,
