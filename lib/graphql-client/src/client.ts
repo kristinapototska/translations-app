@@ -35,9 +35,19 @@ import {
 import {
   GetAllProductsDocument,
   GetProductLocaleDataDocument,
+  GetProductTranslationsDocument,
+  UpdateProductTranslationsDocument,
+  DeleteProductTranslationsDocument,
   createGetAllProductsVariables,
   createGetProductLocaleDataVariables,
+  createGetProductTranslationsVariables,
+  createUpdateProductTranslationsVariables,
+  createDeleteProductTranslationsVariables,
 } from "./queries/product.tada";
+import {
+  GetChannelLocalesDocument,
+  createGetChannelLocalesVariables,
+} from "./queries/locales.tada";
 import {
   GetCategoryTranslationsDocument,
   UpdateCategoryTranslationsDocument,
@@ -1130,5 +1140,123 @@ export class GraphQLClient {
     }
 
     return response.data;
+  }
+
+  // New: Get product translations using new Translations API
+  async getProductTranslations(options: {
+    channelId: number;
+    locale: string;
+    productId?: number;
+    first?: number;
+  }) {
+    type Response = ResultOf<typeof GetProductTranslationsDocument>;
+    
+    const variables = createGetProductTranslationsVariables({
+      channelId: options.channelId,
+      locale: options.locale,
+      productId: options.productId,
+      first: options.first,
+    });
+
+    const response = await this.request<Response>(
+      { query: print(GetProductTranslationsDocument) },
+      variables
+    );
+
+    if (!response.data?.store?.translations) {
+      const productInfo = options.productId ? ` for product ${options.productId}` : '';
+      throw new Error(`Failed to fetch translations${productInfo} in locale ${options.locale}`);
+    }
+
+    return response.data.store.translations;
+  }
+
+  // New: Update product translations using new Translations API
+  async updateProductTranslations(options: {
+    channelId: number;
+    locale: string;
+    productId: number;
+    fields: Array<{
+      fieldName: string;
+      value: string;
+    }>;
+  }) {
+    type Response = ResultOf<typeof UpdateProductTranslationsDocument>;
+    
+    const variables = createUpdateProductTranslationsVariables({
+      channelId: options.channelId,
+      locale: options.locale,
+      productId: options.productId,
+      fields: options.fields,
+    });
+
+    const response = await this.request<Response>(
+      { query: print(UpdateProductTranslationsDocument) },
+      variables
+    );
+
+    if (response.data?.translation?.updateTranslations?.errors?.length) {
+      const errors = response.data.translation.updateTranslations.errors;
+      throw new Error(
+        `Translation update failed for product ${options.productId} in locale ${options.locale}: ${errors.map(e => e.message).join(', ')}`
+      );
+    }
+
+    return response.data;
+  }
+
+  // New: Delete product translations
+  async deleteProductTranslations(options: {
+    channelId: number;
+    locale: string;
+    productId: number;
+    fields: string[];
+  }) {
+    type Response = ResultOf<typeof DeleteProductTranslationsDocument>;
+    
+    const variables = createDeleteProductTranslationsVariables({
+      channelId: options.channelId,
+      locale: options.locale,
+      productId: options.productId,
+      fields: options.fields,
+    });
+
+    const response = await this.request<Response>(
+      { query: print(DeleteProductTranslationsDocument) },
+      variables
+    );
+
+    if (response.data?.translation?.deleteTranslations?.errors?.length) {
+      const errors = response.data.translation.deleteTranslations.errors;
+      throw new Error(
+        `Translation deletion failed for product ${options.productId} in locale ${options.locale}: ${errors.map(e => e.message).join(', ')}`
+      );
+    }
+
+    return response.data;
+  }
+
+  // New: Get channel locales using GraphQL
+  async getChannelLocales(channelId: number) {
+    type Response = ResultOf<typeof GetChannelLocalesDocument>;
+    
+    const variables = createGetChannelLocalesVariables({
+      channelId,
+    });
+
+    const response = await this.request<Response>(
+      { query: print(GetChannelLocalesDocument) },
+      variables
+    );
+
+    if (!response.data?.store?.locales) {
+      throw new Error(`Failed to fetch locales for channel ${channelId}`);
+    }
+
+    return response.data.store.locales.edges.map((edge: any) => ({
+      code: edge.node.code,
+      status: edge.node.status,
+      is_default: edge.node.isDefault,
+    }));
   }
 }

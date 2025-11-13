@@ -775,15 +775,49 @@ export async function GET(request: NextRequest, props: { params: Promise<{ pid: 
     const { accessToken, storeHash } = await getSessionFromContext(context);
     const graphQLClient = createGraphQLClient(accessToken, storeHash);
 
-    const gqlData = await graphQLClient.getProductLocaleData({
-      pid: Number(pid),
-      channelId: Number(channelId),
-      locale: selectedLocale,
-      availableLocales,
-      defaultLocale,
-    });
+    // NEW: Use new Translations API to get translations (with error handling)
+    // Make both API calls in parallel for better performance
+    let translationMap: Record<string, string> = {};
+    
+    const [translationsDataResult, gqlDataResult] = await Promise.allSettled([
+      // New API call - wrapped in promise to handle failures gracefully
+      graphQLClient.getProductTranslations({
+        channelId: Number(channelId),
+        locale: selectedLocale,
+        productId: Number(pid),
+      }).catch((error) => {
+        console.warn(`Failed to fetch translations from new API for product ${pid}, falling back to old API:`, error);
+        return null; // Return null on failure to allow graceful fallback
+      }),
+      // Old API call - required for options/modifiers/customFields
+      graphQLClient.getProductLocaleData({
+        pid: Number(pid),
+        channelId: Number(channelId),
+        locale: selectedLocale,
+        availableLocales,
+        defaultLocale,
+      })
+    ]);
 
-    if (!gqlData.id) {
+    // Handle translations data from new API (if available)
+    if (translationsDataResult.status === 'fulfilled' && translationsDataResult.value) {
+      const translationNode = translationsDataResult.value.edges?.[0]?.node;
+      if (translationNode?.fields) {
+        translationNode.fields.forEach((field: { fieldName: string; original: string; translation: string | null }) => {
+          translationMap[field.fieldName] = field.translation || field.original;
+        });
+      }
+    }
+
+    // Handle product data from old API (required)
+    if (gqlDataResult.status === 'rejected') {
+      return new Response(`Failed to fetch product data: ${gqlDataResult.reason}`, {
+        status: 500,
+      });
+    }
+
+    const gqlData = gqlDataResult.value;
+    if (!gqlData?.id) {
       return new Response(`Product ID ${pid} not found or invalid GraphQL response`, {
         status: 404,
       });
@@ -791,15 +825,16 @@ export async function GET(request: NextRequest, props: { params: Promise<{ pid: 
 
     const productNode = gqlData;
 
+    // Build normalized product data with translations from new API, fallback to old API data
     const normalizedProductData = {
-      name: productNode.basicInformation?.name,
-      description: productNode.basicInformation?.description,
-      pageTitle: productNode.seoInformation?.pageTitle,
-      metaDescription: productNode.seoInformation?.metaDescription,
-      preOrderMessage: productNode.preOrderSettings?.message,
-      warranty: productNode.storefrontDetails?.warranty,
-      availabilityDescription: productNode.storefrontDetails?.availabilityDescription,
-      searchKeywords: productNode.storefrontDetails?.searchKeywords,
+      name: translationMap['name'] || productNode.basicInformation?.name || '',
+      description: translationMap['description'] || productNode.basicInformation?.description || '',
+      pageTitle: translationMap['page_title'] || productNode.seoInformation?.pageTitle || '',
+      metaDescription: translationMap['meta_description'] || productNode.seoInformation?.metaDescription || '',
+      preOrderMessage: translationMap['pre_order_message'] || productNode.preOrderSettings?.message || '',
+      warranty: translationMap['warranty_information'] || productNode.storefrontDetails?.warranty || '',
+      availabilityDescription: translationMap['availability_text'] || productNode.storefrontDetails?.availabilityDescription || '',
+      searchKeywords: translationMap['search_keywords'] || productNode.storefrontDetails?.searchKeywords || '',
       options: {
         edges: (productNode.options?.edges || []).map((edge: any) => ({
           node: {
@@ -867,33 +902,22 @@ export async function GET(request: NextRequest, props: { params: Promise<{ pid: 
       localeData: {} as { [key: string]: any },
     };
 
-    const localeNode =
-      gqlData.overridesForLocale;
-    const options =
-      gqlData?.options?.edges;
-    const modifiers =
-      gqlData?.modifiers?.edges;
-    const customFields =
-      gqlData?.customFields?.edges;
-
+    // Build locale data from translations
+    // Use translations from new API for basic fields, old API for options/modifiers/customFields
     normalizedProductData.localeData[selectedLocale] = {
-      name: localeNode?.basicInformation?.name ?? null,
-      description: localeNode?.basicInformation?.description ?? null,
-      pageTitle: localeNode?.seoInformation?.pageTitle ?? null,
-      metaDescription: localeNode?.seoInformation?.metaDescription ?? null,
-      preOrderMessage: localeNode?.preOrderSettings?.message ?? null,
-      warranty: localeNode?.storefrontDetails?.warranty ?? null,
-      availabilityDescription: localeNode?.storefrontDetails?.availabilityDescription ?? null,
-      searchKeywords: localeNode?.storefrontDetails?.searchKeywords ?? null,
-      options: transformGraphQLOptionsDataToLocaleData(
-        options
-      ),
-      modifiers: transformGraphQLModifiersDataToLocaleData(
-        modifiers
-      ),
-      customFields: transformGraphQLCustomFieldsDataToLocaleData(
-        customFields
-      ),
+      name: translationMap['name'] || null,
+      description: translationMap['description'] || null,
+      pageTitle: translationMap['page_title'] || null,
+      metaDescription: translationMap['meta_description'] || null,
+      preOrderMessage: translationMap['pre_order_message'] || null,
+      warranty: translationMap['warranty_information'] || null,
+      availabilityDescription: translationMap['availability_text'] || null,
+      searchKeywords: translationMap['search_keywords'] || null,
+      // Options, modifiers, customFields still use old API structure
+      // Note: These transform functions already exist in the route file
+      options: transformGraphQLOptionsDataToLocaleData(gqlData?.options?.edges),
+      modifiers: transformGraphQLModifiersDataToLocaleData(gqlData?.modifiers?.edges),
+      customFields: transformGraphQLCustomFieldsDataToLocaleData(gqlData?.customFields?.edges),
     };
 
     return Response.json(normalizedProductData);
@@ -933,211 +957,267 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ pid: 
     const graphQLClient = createGraphQLClient(accessToken, storeHash);
 
     if (body["locale"] && body.locale !== defaultLocale) {
-      const basicInformationGraphData = createGraphFieldsFromPostData(
-        body,
-        "basicInformation"
-      );
-      const seoGraphData = createGraphFieldsFromPostData(
-        body,
-        "seoInformation"
-      );
+      // NEW: Use new Translations API for basic product fields
+      const fields: Array<{ fieldName: string; value: string }> = [];
+
+      // Map form data to new API field names (validate and add fields)
+      if (body.name !== undefined && typeof body.name === 'string') {
+        fields.push({ fieldName: 'name', value: body.name });
+      }
+      if (body.description !== undefined && typeof body.description === 'string') {
+        fields.push({ fieldName: 'description', value: body.description });
+      }
+      if (body.pageTitle !== undefined && typeof body.pageTitle === 'string') {
+        fields.push({ fieldName: 'page_title', value: body.pageTitle });
+      }
+      if (body.metaDescription !== undefined && typeof body.metaDescription === 'string') {
+        fields.push({ fieldName: 'meta_description', value: body.metaDescription });
+      }
+      if (body.preOrderMessage !== undefined && typeof body.preOrderMessage === 'string') {
+        fields.push({ fieldName: 'pre_order_message', value: body.preOrderMessage });
+      }
+      if (body.warranty !== undefined && typeof body.warranty === 'string') {
+        fields.push({ fieldName: 'warranty_information', value: body.warranty });
+      }
+      if (body.availabilityDescription !== undefined && typeof body.availabilityDescription === 'string') {
+        fields.push({ fieldName: 'availability_text', value: body.availabilityDescription });
+      }
+      if (body.searchKeywords !== undefined && typeof body.searchKeywords === 'string') {
+        fields.push({ fieldName: 'search_keywords', value: body.searchKeywords });
+      }
+
+      // Update basic fields with new API (with error handling)
+      if (fields.length > 0) {
+        try {
+          await graphQLClient.updateProductTranslations({
+            channelId: Number(channelId),
+            locale: body.locale,
+            productId: Number(pid),
+            fields: fields,
+          });
+        } catch (error) {
+          console.error(`Failed to update translations with new API for product ${pid}:`, error);
+          // Continue with old API updates - partial update is better than complete failure
+          // Log error but don't throw to allow options/modifiers to still update
+        }
+      }
+
+      // Options, modifiers, and custom fields still use old API
       const optionData = createGraphFieldsFromPostData(body, "options");
       const modifierData = createGraphFieldsFromPostData(body, "modifiers");
-      const customFieldData = createGraphFieldsFromPostData(
-        body,
-        "customFields"
-      );
+      const customFieldData = createGraphFieldsFromPostData(body, "customFields");
 
-      const preOrderGraphData = createGraphFieldsFromPostData(
-        body,
-        "preOrderSettings"
-      );
+      // Get fields to remove for each section
+      const basicInfoFieldsToRemove = getBasicInformationFieldsToRemove({
+        name: body.name,
+        description: body.description
+      });
+      const seoFieldsToRemove = getSeoInformationFieldsToRemove({
+        pageTitle: body.pageTitle,
+        metaDescription: body.metaDescription
+      });
+      const storefrontFieldsToRemove = getStorefrontDetailsFieldsToRemove({
+        warranty: body.warranty,
+        availabilityDescription: body.availabilityDescription,
+        searchKeywords: body.searchKeywords
+      });
+      const preOrderFieldsToRemove = getPreOrderSettingsFieldsToRemove({
+        preOrderMessage: body.preOrderMessage
+      });
+      const customFieldsToRemove = getCustomFieldsToRemove(customFieldData);
 
-      const storefrontGraphData = createGraphFieldsFromPostData(
-        body,
-        "storefrontDetails"
-      );
+      // Map old API field names to new API field names for deletion
+      // Note: Field names must match what getBasicInformationFieldsToRemove, etc. return
+      const oldToNewFieldNameMap: Record<string, string> = {
+        'PRODUCT_NAME_FIELD': 'name',
+        'PRODUCT_DESCRIPTION_FIELD': 'description',
+        'PRODUCT_PAGE_TITLE_FIELD': 'page_title',
+        'PRODUCT_META_DESCRIPTION_FIELD': 'meta_description',
+        'PRODUCT_WARRANTY': 'warranty_information',
+        'PRODUCT_AVAILABILITY_DESCRIPTION_FIELD': 'availability_text',
+        'PRODUCT_SEARCH_KEYWORDS': 'search_keywords',
+        'PRODUCT_PRE_ORDER_MESSAGE': 'pre_order_message',
+      };
 
-      // For advanced features like options, modifiers, and custom fields, we still use the legacy format
-      // (Note, using this for all updates currently because GraphQL Tada client approach did not pan out fully)
-      // if (optionData.options || modifierData.modifiers || customFieldData.customFields) {
-        // Get fields to remove for each section
-        const basicInfoFieldsToRemove = getBasicInformationFieldsToRemove(basicInformationGraphData);
-        const seoFieldsToRemove = getSeoInformationFieldsToRemove(seoGraphData);
-        const storefrontFieldsToRemove = getStorefrontDetailsFieldsToRemove(storefrontGraphData);
-        const preOrderFieldsToRemove = getPreOrderSettingsFieldsToRemove(preOrderGraphData);
-        const customFieldsToRemove = getCustomFieldsToRemove(customFieldData);
+      // Collect all basic fields to delete using new API
+      const fieldsToDelete: string[] = [];
+      
+      // Map basic info fields
+      basicInfoFieldsToRemove.forEach((field: string) => {
+        const newFieldName = oldToNewFieldNameMap[field];
+        if (newFieldName) fieldsToDelete.push(newFieldName);
+      });
+      
+      // Map SEO fields
+      seoFieldsToRemove.forEach((field: string) => {
+        const newFieldName = oldToNewFieldNameMap[field];
+        if (newFieldName) fieldsToDelete.push(newFieldName);
+      });
+      
+      // Map storefront fields
+      storefrontFieldsToRemove.forEach((field: string) => {
+        const newFieldName = oldToNewFieldNameMap[field];
+        if (newFieldName) fieldsToDelete.push(newFieldName);
+      });
+      
+      // Map pre-order fields
+      preOrderFieldsToRemove.forEach((field: string) => {
+        const newFieldName = oldToNewFieldNameMap[field];
+        if (newFieldName) fieldsToDelete.push(newFieldName);
+      });
 
-        const graphVariables = {
-          channelId: `bc/store/channel/${channelId}`,
+      // Delete basic fields using new API
+      if (fieldsToDelete.length > 0) {
+        try {
+          await graphQLClient.deleteProductTranslations({
+            channelId: Number(channelId),
+            locale: body.locale,
+            productId: Number(pid),
+            fields: fieldsToDelete,
+          });
+        } catch (error) {
+          console.error(`Failed to delete translations with new API for product ${pid}:`, error);
+          // Continue with other updates - partial update is better than complete failure
+        }
+      }
+
+      // Update options/modifiers/customFields with old API (existing code)
+      // Note: Custom fields removals still use old API for now
+      const graphVariables = {
+        channelId: `bc/store/channel/${channelId}`,
+        locale: body.locale,
+        ...(customFieldsToRemove.length > 0 && {
+          removedCustomFieldsInput: {
+            productId: `bc/store/product/${pid}`,
+            data: customFieldsToRemove.map(field => ({
+              customFieldId: field.customFieldId,
+              channelLocaleContextData: {
+                context: {
+                  channelId: `bc/store/channel/${channelId}`,
+                  locale: body.locale
+                },
+                attributes: field.fields
+              }
+            }))
+          }
+        }),
+        removedOptionsInput: {
+          productId: `bc/store/product/${pid}`,
+          localeContext: {
+            channelId: `bc/store/channel/${channelId}`,
+            locale: body.locale,
+          },
+          data: {
+            options: transformPostedOptionDataToGraphQLSchema(optionData).removedValues
+          }
+        },
+        optionsInput: {
+          productId: `bc/store/product/${pid}`,
+          localeContext: {
+            channelId: `bc/store/channel/${channelId}`,
+            locale: body.locale,
+          },
+          data: {
+            options: transformPostedOptionDataToGraphQLSchema(optionData).options,
+          },
+        },
+        removedModifiersInput: {
+          productId: `bc/store/product/${pid}`,
+          localeContext: {
+            channelId: `bc/store/channel/${channelId}`,
+            locale: body.locale,
+          },
+          data: {
+            modifiers: transformPostedModifierDataToGraphQLSchema(modifierData).removedValues
+          }
+        },
+        modifiersInput: {
+          productId: `bc/store/product/${pid}`,
+          localeContext: {
+            channelId: `bc/store/channel/${channelId}`,
+            locale: body.locale,
+          },
+          data: {
+            modifiers: transformPostedModifierDataToGraphQLSchema(modifierData).modifiers,
+          },
+        },
+        customFieldsInput: {
+          productId: `bc/store/product/${pid}`,
+          data: transformPostedCustomFieldDataToGraphQLSchema(
+            customFieldData,
+            channelId,
+            body.locale
+          ),
+        },
+      };
+
+      // Update options/modifiers/customFields with old API
+      try {
+        await graphQLClient.NOTADA_updateProductLocaleData(graphVariables);
+      } catch (error) {
+        console.error(`Failed to update options/modifiers/customFields with old API for product ${pid}:`, error);
+        // If this fails, we still want to return the basic fields that were updated
+        // Log error but continue to return partial result
+      }
+
+      // Fetch complete updated data to return in response
+      const { defaultLocale: updatedDefaultLocale, availableLocales: updatedLocales } = await getChannelLocales(context, channelId);
+      
+      // Fetch updated product data (includes options/modifiers/customFields)
+      const updatedGqlData = await graphQLClient.getProductLocaleData({
+        pid: Number(pid),
+        channelId: Number(channelId),
+        locale: body.locale,
+        availableLocales: updatedLocales,
+        defaultLocale: updatedDefaultLocale,
+      });
+
+      // Fetch updated translations from new API (with error handling)
+      let updatedTranslationMap: Record<string, string> = {};
+      try {
+        const updatedTranslationsData = await graphQLClient.getProductTranslations({
+          channelId: Number(channelId),
           locale: body.locale,
-          input: {
-            productId: `bc/store/product/${pid}`,
-            localeContext: {
-              channelId: `bc/store/channel/${channelId}`,
-              locale: body.locale,
-            },
-            data: basicInformationGraphData,
-          },
-          seoInput: {
-            productId: `bc/store/product/${pid}`,
-            localeContext: {
-              channelId: `bc/store/channel/${channelId}`,
-              locale: body.locale,
-            },
-            data: seoGraphData,
-          },
-          preOrderInput: {
-            productId: `bc/store/product/${pid}`,
-            localeContext: {
-              channelId: `bc/store/channel/${channelId}`,
-              locale: body.locale,
-            },
-            data: {
-              message: preOrderGraphData.preOrderMessage
-            }
-          },
-          storefrontInput: {
-            productId: `bc/store/product/${pid}`,
-            localeContext: {
-              channelId: `bc/store/channel/${channelId}`,
-              locale: body.locale,
-            },
-            data: {
-              warranty: storefrontGraphData.warranty,
-              availabilityDescription: storefrontGraphData.availabilityDescription,
-              searchKeywords: storefrontGraphData.searchKeywords
-            }
-          },
-          ...(basicInfoFieldsToRemove.length > 0 && {
-            removedBasicInfoInput: {
-              productId: `bc/store/product/${pid}`,
-              localeContext: {
-                channelId: `bc/store/channel/${channelId}`,
-                locale: body.locale,
-              },
-              overridesToRemove: basicInfoFieldsToRemove
-            }
-          }),
-          ...(seoFieldsToRemove.length > 0 && {
-            removedSeoInput: {
-              productId: `bc/store/product/${pid}`,
-              localeContext: {
-                channelId: `bc/store/channel/${channelId}`,
-                locale: body.locale,
-              },
-              overridesToRemove: seoFieldsToRemove
-            }
-          }),
-          ...(storefrontFieldsToRemove.length > 0 && {
-            removedStorefrontDetailsInput: {
-              productId: `bc/store/product/${pid}`,
-              localeContext: {
-                channelId: `bc/store/channel/${channelId}`,
-                locale: body.locale,
-              },
-              overridesToRemove: storefrontFieldsToRemove
-            }
-          }),
-          ...(preOrderFieldsToRemove.length > 0 && {
-            removedPreOrderInput: {
-              productId: `bc/store/product/${pid}`,
-              localeContext: {
-                channelId: `bc/store/channel/${channelId}`,
-                locale: body.locale,
-              },
-              overridesToRemove: preOrderFieldsToRemove
-            }
-          }),
-          ...(customFieldsToRemove.length > 0 && {
-            removedCustomFieldsInput: {
-              productId: `bc/store/product/${pid}`,
-              data: customFieldsToRemove.map(field => ({
-                customFieldId: field.customFieldId,
-                channelLocaleContextData: {
-                  context: {
-                    channelId: `bc/store/channel/${channelId}`,
-                    locale: body.locale
-                  },
-                  attributes: field.fields
-                }
-              }))
-            }
-          }),
-          removedOptionsInput: {
-            productId: `bc/store/product/${pid}`,
-            localeContext: {
-              channelId: `bc/store/channel/${channelId}`,
-              locale: body.locale,
-            },
-            data: {
-              options: transformPostedOptionDataToGraphQLSchema(optionData).removedValues
-            }
-          },
-          optionsInput: {
-            productId: `bc/store/product/${pid}`,
-            localeContext: {
-              channelId: `bc/store/channel/${channelId}`,
-              locale: body.locale,
-            },
-            data: {
-              options: transformPostedOptionDataToGraphQLSchema(optionData).options,
-            },
-          },
-          removedModifiersInput: {
-            productId: `bc/store/product/${pid}`,
-            localeContext: {
-              channelId: `bc/store/channel/${channelId}`,
-              locale: body.locale,
-            },
-            data: {
-              modifiers: transformPostedModifierDataToGraphQLSchema(modifierData).removedValues
-            }
-          },
-          modifiersInput: {
-            productId: `bc/store/product/${pid}`,
-            localeContext: {
-              channelId: `bc/store/channel/${channelId}`,
-              locale: body.locale,
-            },
-            data: {
-              modifiers: transformPostedModifierDataToGraphQLSchema(modifierData).modifiers,
-            },
-          },
-          customFieldsInput: {
-            productId: `bc/store/product/${pid}`,
-            data: transformPostedCustomFieldDataToGraphQLSchema(
-              customFieldData,
-              channelId,
-              body.locale
-            ),
-          },
-        };
+          productId: Number(pid),
+        });
+        
+        const updatedTranslationNode = updatedTranslationsData.edges?.[0]?.node;
+        if (updatedTranslationNode?.fields) {
+          updatedTranslationNode.fields.forEach((field: { fieldName: string; translation: string | null; original: string }) => {
+            updatedTranslationMap[field.fieldName] = field.translation || field.original;
+          });
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch updated translations, using old API data:`, error);
+        // Fallback to old API data
+        if (updatedGqlData.overridesForLocale) {
+          updatedTranslationMap['name'] = updatedGqlData.overridesForLocale.basicInformation?.name || '';
+          updatedTranslationMap['description'] = updatedGqlData.overridesForLocale.basicInformation?.description || '';
+          updatedTranslationMap['page_title'] = updatedGqlData.overridesForLocale.seoInformation?.pageTitle || '';
+          updatedTranslationMap['meta_description'] = updatedGqlData.overridesForLocale.seoInformation?.metaDescription || '';
+          updatedTranslationMap['pre_order_message'] = updatedGqlData.overridesForLocale.preOrderSettings?.message || '';
+          updatedTranslationMap['warranty_information'] = updatedGqlData.overridesForLocale.storefrontDetails?.warranty || '';
+          updatedTranslationMap['availability_text'] = updatedGqlData.overridesForLocale.storefrontDetails?.availabilityDescription || '';
+          updatedTranslationMap['search_keywords'] = updatedGqlData.overridesForLocale.storefrontDetails?.searchKeywords || '';
+        }
+      }
 
-        const gqlData: any = await graphQLClient.NOTADA_updateProductLocaleData(
-          graphVariables
-        );
-
-        result = {
-          ...gqlData?.data?.product?.setProductBasicInformation?.product
-            ?.overridesForLocale?.basicInformation,
-          ...gqlData?.data?.product?.setProductSeoInformation?.product
-            ?.overridesForLocale?.seoInformation,
-          preOrderMessage: gqlData?.data?.product?.setProductPreOrderSettings?.product
-            ?.overridesForLocale?.preOrderSettings?.message,
-          ...gqlData?.data?.product?.setProductStorefrontDetails?.product
-            ?.overridesForLocale?.storefrontDetails,
-          options: transformGraphQLOptionsResponse(
-            gqlData?.data?.product?.setProductOptionsInformation?.product?.options
-          ),
-          modifiers: transformGraphQLModifiersResponse(
-            gqlData?.data?.product?.setProductModifiersInformation?.product?.modifiers
-          ),
-          customFields: transformGraphQLCustomFieldsResponse(
-            gqlData?.data?.product?.updateProductCustomFields?.product
-              ?.customFields
-          ),
-        };
+      // Build complete result with all fields
+      result = {
+        name: updatedTranslationMap['name'] || updatedGqlData.overridesForLocale?.basicInformation?.name || null,
+        description: updatedTranslationMap['description'] || updatedGqlData.overridesForLocale?.basicInformation?.description || null,
+        pageTitle: updatedTranslationMap['page_title'] || updatedGqlData.overridesForLocale?.seoInformation?.pageTitle || null,
+        metaDescription: updatedTranslationMap['meta_description'] || updatedGqlData.overridesForLocale?.seoInformation?.metaDescription || null,
+        preOrderMessage: updatedTranslationMap['pre_order_message'] || updatedGqlData.overridesForLocale?.preOrderSettings?.message || null,
+        warranty: updatedTranslationMap['warranty_information'] || updatedGqlData.overridesForLocale?.storefrontDetails?.warranty || null,
+        availabilityDescription: updatedTranslationMap['availability_text'] || updatedGqlData.overridesForLocale?.storefrontDetails?.availabilityDescription || null,
+        searchKeywords: updatedTranslationMap['search_keywords'] || updatedGqlData.overridesForLocale?.storefrontDetails?.searchKeywords || null,
+        // Include options, modifiers, customFields from updated product data
+        // Note: These transform functions already exist in the route file
+        options: transformGraphQLOptionsResponse(updatedGqlData?.options),
+        modifiers: transformGraphQLModifiersResponse(updatedGqlData?.modifiers),
+        customFields: transformGraphQLCustomFieldsResponse(updatedGqlData?.customFields),
+      };
       // } else {
       //   // For basic product information updates, use the new simplified interface
       //   const gqlData = await graphQLClient.updateProductLocaleData({
