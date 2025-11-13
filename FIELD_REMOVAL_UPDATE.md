@@ -78,7 +78,7 @@ if (fieldsToDelete.length > 0) {
 
 - ✅ Options (updates and removals)
 - ✅ Modifiers (updates and removals)
-- ✅ Custom fields (removals only - updates use new API)
+- ✅ Custom fields (updates only - removals now use new API)
 
 ---
 
@@ -89,7 +89,8 @@ if (fieldsToDelete.length > 0) {
 - [ ] Test removing all basic fields
 - [ ] Test removing fields that don't exist (should handle gracefully)
 - [ ] Verify options/modifiers removals still work (old API)
-- [ ] Verify custom fields removals still work (old API)
+- [ ] Test removing custom fields (new API with PRODUCT_CUSTOM_FIELDS)
+- [ ] Test removing multiple custom fields at once
 - [ ] Test error handling if new API deletion fails
 
 ---
@@ -105,5 +106,9 @@ if (fieldsToDelete.length > 0) {
 
 ✅ **Implementation Updated**
 
-The code now uses the new API's `deleteTranslations` for basic field removals, ensuring consistency with the update strategy.
+The code now uses the new API's `deleteTranslations` for:
+- ✅ Basic field removals (PRODUCTS resource type)
+- ✅ Custom field removals (PRODUCT_CUSTOM_FIELDS resource type)
+
+This ensures consistency: if fields are updated via the new API, removals also use the new API.
 

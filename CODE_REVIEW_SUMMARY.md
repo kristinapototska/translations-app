@@ -34,6 +34,7 @@ The proposed implementation for migrating product translations to the new BigCom
 
 ### ✅ Medium Priority (Resolved)
 - ✅ Field removal strategy - **RESOLVED** - Basic field removals now use new API's `deleteTranslations`
+- ✅ Custom field removals - **RESOLVED** - Custom field removals now use new API's `deleteTranslations` with `PRODUCT_CUSTOM_FIELDS` resource type
 
 ### 🟢 Low Priority (Nice to Have)
 - 🟢 Duplicate locale fetching in PUT handler - Minor performance optimization
@@ -92,7 +93,7 @@ The proposed implementation for migrating product translations to the new BigCom
 ### Before Creating PR
 
 1. ✅ **Code is ready** - All critical issues addressed
-2. ✅ **Field removal strategy** - **RESOLVED** - Uses new API's `deleteTranslations`
+2. ✅ **Field removal strategy** - **RESOLVED** - Basic fields and custom fields use new API's `deleteTranslations`
 3. ✅ **Verify imports** - Ensure all imports are added during implementation
 4. ✅ **Test thoroughly** - Test with real BigCommerce store
 

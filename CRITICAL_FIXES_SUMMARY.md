@@ -181,6 +181,44 @@ After implementing these fixes, verify:
 
 ---
 
+## ✅ Fix #4: Custom Field Removals Migration (New)
+
+### Issue
+Custom field removals were still using the old API, while custom field updates use the new API.
+
+### Fix Applied
+- ✅ Added `deleteCustomFieldTranslations()` method to GraphQL client
+- ✅ Added `createDeleteCustomFieldTranslationsVariables()` helper function
+- ✅ Updated PUT handler to use new API for custom field deletions
+- ✅ Uses `PRODUCT_CUSTOM_FIELDS` resource type with `deleteTranslations` mutation
+- ✅ Removed old API custom field removal logic
+
+### Code Location
+- `lib/graphql-client/src/queries/product.tada.ts` - Helper function
+- `lib/graphql-client/src/client.ts` - New method
+- `app/api/product/[pid]/route.ts` - PUT handler update
+
+### Key Changes
+```typescript
+// Before: Custom field removals used old API
+removedCustomFieldsInput: {
+  productId: `bc/store/product/${pid}`,
+  data: customFieldsToRemove.map(field => ({...}))
+}
+
+// After: Custom field removals use new API
+await graphQLClient.deleteCustomFieldTranslations({
+  channelId: Number(channelId),
+  locale: body.locale,
+  customFields: customFieldsToRemove.map(field => ({
+    customFieldId: field.customFieldId,
+    fields: field.fields  // ['NAME', 'VALUE']
+  })),
+});
+```
+
+---
+
 ## Conclusion
 
 All **critical "must fix" issues** have been addressed:
@@ -188,6 +226,7 @@ All **critical "must fix" issues** have been addressed:
 ✅ **Error Handling**: Graceful fallback if new API fails  
 ✅ **Complete Data**: All fields returned in responses  
 ✅ **Partial Updates**: Proper error handling and logging  
+✅ **Custom Field Removals**: Migrated to new API with `PRODUCT_CUSTOM_FIELDS` resource type
 
 The implementation is now **production-ready** with:
 - Robust error handling
@@ -195,6 +234,7 @@ The implementation is now **production-ready** with:
 - Graceful degradation
 - Performance optimizations
 - Better debugging capabilities
+- Full custom fields migration (updates and deletions)
 
 **Ready for implementation and testing.**
 

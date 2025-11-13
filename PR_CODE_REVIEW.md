@@ -236,14 +236,16 @@ if (translationsDataResult.status === 'fulfilled' && translationsDataResult.valu
 
 **Resolution**: ✅ **FIXED**
 - Basic field removals now use the new API's `deleteTranslations` mutation
+- Custom field removals now use the new API's `deleteTranslations` mutation with `PRODUCT_CUSTOM_FIELDS` resource type
 - Created mapping function to convert old API field names to new API field names
-- Removed old API removal logic for basic fields
-- Options/modifiers/customFields removals still use old API
+- Removed old API removal logic for basic fields and custom fields
+- Options/modifiers removals still use old API
 
 **Implementation**:
 - Maps old API field names (e.g., `PRODUCT_NAME_FIELD`) to new API field names (e.g., `name`)
 - Uses `deleteProductTranslations` for all basic field removals
-- Maintains consistency: basic fields use new API for both updates and deletions
+- Uses `deleteCustomFieldTranslations` for all custom field removals
+- Maintains consistency: basic fields and custom fields use new API for both updates and deletions
 
 **Status**: ✅ **RESOLVED** - Implementation updated
 
@@ -492,7 +494,8 @@ import { createGraphQLClient } from "@bigcommerce/translations-graphql-client";
 
 - [ ] Test product translation query with new API
 - [ ] Test product translation update with new API
-- [ ] Test field removal (verify which API is used)
+- [ ] Test basic field removal (verify new API is used)
+- [ ] Test custom field removal (verify new API with PRODUCT_CUSTOM_FIELDS is used)
 - [ ] Test channel locales query with GraphQL
 - [ ] Verify options/modifiers still work (using old API)
 - [ ] Verify custom fields still work (using old API)
@@ -518,7 +521,8 @@ The code follows existing patterns exactly (matching category implementation), h
 - ✅ Updated client methods to match category pattern exactly
 - ✅ Fixed `resourceIds` to use empty array instead of `undefined`
 - ✅ Improved error handling to match category pattern
-- ✅ **Field removals now use new API's `deleteTranslations`** (Issue #7 resolved)
+- ✅ **Basic field removals now use new API's `deleteTranslations`** (Issue #7 resolved)
+- ✅ **Custom field removals now use new API's `deleteTranslations` with PRODUCT_CUSTOM_FIELDS** (Issue #7 resolved)
 
 ---
 
@@ -531,7 +535,7 @@ The code follows existing patterns exactly (matching category implementation), h
 - [x] Performance is optimized (with minor improvements possible)
 - [x] Backward compatibility is maintained
 - [x] Critical issues are addressed
-- [ ] Field removal strategy is clarified (design decision needed)
+- [x] Field removal strategy is clarified - Basic fields and custom fields use new API
 - [ ] All imports are verified
 - [ ] Testing is completed
 
@@ -539,7 +543,7 @@ The code follows existing patterns exactly (matching category implementation), h
 
 ## Next Steps
 
-1. **Address Issue #7** (Field removal strategy) - Get design decision
+1. ✅ **Issue #7** (Field removal strategy) - RESOLVED - Basic fields and custom fields use new API
 2. **Verify all imports** are added during implementation
 3. **Test thoroughly** with real BigCommerce store
 4. **Create PR** with all changes

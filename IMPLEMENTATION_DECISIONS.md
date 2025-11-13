@@ -21,6 +21,7 @@ This document outlines the decisions made for migrating to the new Translations 
    - Fields: `name`, `value`
    - Query: `store.translations(filters: { resourceType: PRODUCT_CUSTOM_FIELDS, ... })`
    - Update: `translation.updateTranslations(input: { resourceType: PRODUCT_CUSTOM_FIELDS, ... })`
+   - Delete: `translation.deleteTranslations(input: { resourceType: PRODUCT_CUSTOM_FIELDS, ... })`
 
 3. **Locales**
    - Query: `store.locales(input: { channelId: ... })`
@@ -60,8 +61,10 @@ Product Translation Request
 1. **New Methods** (in `GraphQLClient`):
    - `getProductTranslations()` - Query basic fields
    - `updateProductTranslations()` - Update basic fields
+   - `deleteProductTranslations()` - Delete basic fields
    - `getProductCustomFieldTranslations()` - Query custom fields
    - `updateProductCustomFieldTranslations()` - Update custom fields
+   - `deleteCustomFieldTranslations()` - Delete custom fields
    - `getChannelLocales()` - Query locales via GraphQL
 
 2. **Preserved Methods** (keep existing):
@@ -76,9 +79,9 @@ Product Translation Request
 
 ## Migration Path
 
-### Phase 1: Basic Fields (Current)
-- ✅ Implement new API for basic product fields
-- ✅ Implement new API for custom fields
+### Phase 1: Basic Fields & Custom Fields (Current)
+- ✅ Implement new API for basic product fields (updates and deletions)
+- ✅ Implement new API for custom fields (updates and deletions)
 - ✅ Implement GraphQL for locales
 - ✅ Keep old API for options/modifiers
 
@@ -114,8 +117,10 @@ Product Translation Request
 ### Test New API
 - [ ] Basic product fields translation query
 - [ ] Basic product fields translation update
+- [ ] Basic product fields translation deletion
 - [ ] Custom fields translation query
 - [ ] Custom fields translation update
+- [ ] Custom fields translation deletion
 - [ ] Locales query via GraphQL
 
 ### Test Old API (Preserved)
@@ -173,10 +178,10 @@ await graphQLClient.NOTADA_updateProductLocaleData({
 
 ## Summary
 
-- ✅ **New API**: Basic fields, custom fields, locales
+- ✅ **New API**: Basic fields (updates & deletions), custom fields (updates & deletions), locales
 - ⏸️ **Old API**: Options, modifiers (until support available)
 - 🔄 **Hybrid**: Both APIs work together seamlessly
 - 🚀 **Future**: Easy migration path for options/modifiers
 
-This approach provides immediate benefits while maintaining full functionality and preparing for future enhancements.
+This approach provides immediate benefits while maintaining full functionality and preparing for future enhancements. Custom fields are now fully migrated to the new API.
 

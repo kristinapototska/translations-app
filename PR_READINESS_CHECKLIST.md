@@ -26,6 +26,7 @@
 
 2. **Design Decision** (Medium) - ✅ **RESOLVED**
    - [x] **Field removal strategy**: Basic field removals use new API's `deleteTranslations`
+   - [x] **Custom field removals**: Custom field removals use new API's `deleteTranslations` with `PRODUCT_CUSTOM_FIELDS`
    - [x] Documented in code and documentation
 
 3. **Code Completeness** (Medium)
@@ -56,8 +57,8 @@ Migrate product translations to use new BigCommerce Translations Admin GraphQL A
 - ✅ Complete return data in all responses
 
 ## Technical Details
-- **New API**: Basic product fields (name, description, page_title, etc.)
-- **New API**: Custom fields (PRODUCT_CUSTOM_FIELDS resource type)
+- **New API**: Basic product fields (name, description, page_title, etc.) - updates and deletions
+- **New API**: Custom fields (PRODUCT_CUSTOM_FIELDS resource type) - updates and deletions
 - **New API**: Locales (GraphQL `store.locales` query)
 - **Old API**: Options and modifiers (will migrate later)
 
@@ -101,7 +102,7 @@ None - maintains full backward compatibility
 **Confidence**: **High**
 
 **Remaining Items**: 
-- Design decision on field removal strategy (can be addressed in PR review)
+- ✅ Design decision on field removal strategy - RESOLVED (basic fields and custom fields use new API)
 - Import verification (should be done during implementation)
 
 ---
@@ -109,7 +110,7 @@ None - maintains full backward compatibility
 ## Next Steps
 
 1. ✅ Code review completed
-2. ⏳ Address design decision on field removal
+2. ✅ Address design decision on field removal - RESOLVED
 3. ⏳ Verify all imports during implementation
 4. ⏳ Test thoroughly
 5. ⏳ Create PR
