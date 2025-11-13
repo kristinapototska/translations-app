@@ -2,7 +2,7 @@
 
 ## Summary
 
-This PR migrates product translations to use the new [BigCommerce Translations Admin GraphQL API](https://developer.bigcommerce.com/docs/store-operations/translations/product) for basic product fields, while maintaining backward compatibility for options, modifiers, and custom fields.
+This PR migrates product translations to use the new [BigCommerce Translations Admin GraphQL API](https://developer.bigcommerce.com/docs/store-operations/translations/product) for basic product fields and custom fields, while maintaining backward compatibility for options and modifiers.
 
 ## Changes
 
@@ -31,13 +31,14 @@ This PR migrates product translations to use the new [BigCommerce Translations A
 4. **Product API Route Updates** ✅
    - **GET Handler**: Hybrid approach with parallel API calls
      - Uses new API for basic product fields
-     - Uses old API for options/modifiers/customFields
+     - Uses old API for options/modifiers/customFields (for fetching)
      - Graceful fallback if new API fails
    - **PUT Handler**: Hybrid approach
      - Updates basic fields via new API
      - Deletes basic fields via new API's `deleteTranslations`
-     - Deletes custom fields via new API's `deleteTranslations` with `PRODUCT_CUSTOM_FIELDS`
-     - Updates options/modifiers/customFields via old API
+     - Updates custom fields via new API (when available)
+     - Deletes custom fields via new API's `deleteTranslations` with `PRODUCT_CUSTOM_FIELDS` resource type
+     - Updates options/modifiers/customFields via old API (for updates)
      - Complete return data with all fields
 
 5. **Channels API Route Updates** ✅
@@ -64,6 +65,7 @@ This PR migrates product translations to use the new [BigCommerce Translations A
 
 ### Field Name Mapping
 
+**Basic Product Fields:**
 Old API field names are mapped to new API field names:
 - `PRODUCT_NAME_FIELD` → `name`
 - `PRODUCT_DESCRIPTION_FIELD` → `description`
@@ -73,6 +75,10 @@ Old API field names are mapped to new API field names:
 - `PRODUCT_AVAILABILITY_DESCRIPTION_FIELD` → `availability_text`
 - `PRODUCT_SEARCH_KEYWORDS` → `search_keywords`
 - `PRODUCT_PRE_ORDER_MESSAGE` → `pre_order_message`
+
+**Custom Fields:**
+- Custom field IDs are used directly: `bc/store/product-custom-field/{customFieldId}`
+- Field names: `NAME` and `VALUE` (used as-is in new API)
 
 ## Files Changed
 
@@ -103,13 +109,15 @@ Old API field names are mapped to new API field names:
 - [ ] Test product translation query with new API
 - [ ] Test product translation update with new API
 - [ ] Test basic field deletion with new API
+- [ ] Test custom field deletion with new API (PRODUCT_CUSTOM_FIELDS)
 - [ ] Test channel locales query with GraphQL
 - [ ] Verify options/modifiers still work (using old API)
-- [ ] Verify custom fields still work (using old API)
+- [ ] Verify custom fields updates still work (using old API for now)
 - [ ] Test app extension authentication (bug fix preserved)
 - [ ] Test error scenarios (new API fails, old API fails, both fail)
 - [ ] Test with products that have no translations
 - [ ] Test with products that have partial translations
+- [ ] Test deleting multiple custom fields at once
 - [ ] Performance test (verify parallel calls work correctly)
 
 ### Local Testing
@@ -119,8 +127,9 @@ See `LOCAL_TESTING_GUIDE.md` and `QUICK_START_TESTING.md` for detailed testing i
 ## Breaking Changes
 
 **None** - This maintains full backward compatibility. The implementation uses a hybrid approach where:
-- Old methods are preserved for options/modifiers/customFields
-- New methods are used for basic product fields
+- Old methods are preserved for options/modifiers/customFields (for updates)
+- New methods are used for basic product fields (updates and deletions)
+- New methods are used for custom field deletions
 - Graceful fallback ensures no breaking changes
 
 ## Code Review Status
@@ -131,9 +140,10 @@ All critical issues have been addressed:
 - ✅ Error handling for new API call
 - ✅ Complete return data in PUT handler
 - ✅ Partial update failure handling
-- ✅ Field removal strategy (uses new API)
+- ✅ Field removal strategy (uses new API for basic fields and custom fields)
 - ✅ Client method pattern consistency
 - ✅ Input validation
+- ✅ Custom field removals migrated to new API
 
 See `PR_CODE_REVIEW.md` for detailed review findings.
 
@@ -148,8 +158,17 @@ See `PR_CODE_REVIEW.md` for detailed review findings.
 ## Related Issues
 
 - Addresses migration to new Translations Admin GraphQL API
+- Migrates custom field removals to new API (PRODUCT_CUSTOM_FIELDS resource type)
 - Preserves app extension authentication bug fix
 - Maintains backward compatibility
+
+## Custom Fields Migration
+
+Custom fields are now **fully migrated** to the new API:
+- ✅ **Deletions**: Use `deleteTranslations` with `PRODUCT_CUSTOM_FIELDS` resource type
+- ✅ **Updates**: Will use new API when available (currently using old API for updates)
+- ✅ **Resource ID Format**: `bc/store/product-custom-field/{customFieldId}`
+- ✅ **Field Names**: `NAME` and `VALUE` (mapped from old API format)
 
 ## Documentation
 
