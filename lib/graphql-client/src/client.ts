@@ -1285,8 +1285,9 @@ export class GraphQLClient {
 
     if (response.data?.translation?.deleteTranslations?.errors?.length) {
       const errors = response.data.translation.deleteTranslations.errors;
+      const fieldIds = options.customFields.map(f => f.customFieldId).join(', ');
       throw new Error(
-        `Custom field translation deletion failed in locale ${options.locale}: ${errors.map(e => e.message).join(', ')}`
+        `Custom field translation deletion failed for fields [${fieldIds}] in locale ${options.locale}: ${errors.map(e => e.message).join(', ')}`
       );
     }
 

@@ -134,6 +134,43 @@ describe('Product API Route - GET Handler', () => {
       expect(data.description).toBe('Description');
     });
 
+    it('should handle empty availableLocales array gracefully', async () => {
+      const mockProductData = {
+        id: 123,
+        basicInformation: { name: 'Product Name' },
+        seoInformation: {},
+        options: { edges: [] },
+        modifiers: { edges: [] },
+        customFields: { edges: [] },
+      };
+
+      mockGraphQLClient.getProductTranslations.mockResolvedValue({ edges: [] });
+      mockGraphQLClient.getProductLocaleData.mockResolvedValue(mockProductData);
+
+      // Mock getChannelLocales to return empty array
+      vi.mock('@/lib/utils/channels', () => ({
+        getChannelLocales: vi.fn().mockResolvedValue({
+          defaultLocale: 'en',
+          availableLocales: [],
+        }),
+      }));
+
+      const response = await GET(mockRequest, { params: { pid: '123' } });
+
+      // Should use defaultLocale when availableLocales is empty
+      expect(response.status).toBe(200);
+    });
+
+    it('should validate product ID parameter', async () => {
+      const invalidRequest = new NextRequest('http://localhost:3000/api/product/invalid?channelId=1&locale=fr');
+
+      const response = await GET(invalidRequest, { params: { pid: 'invalid' } });
+
+      expect(response.status).toBe(400);
+      const text = await response.text();
+      expect(text).toContain('Invalid product ID');
+    });
+
     it('should use parallel API calls for better performance', async () => {
       const mockTranslationsData = {
         edges: [{
@@ -541,6 +578,46 @@ describe('Product API Route - PUT Handler', () => {
     });
   });
 
+  describe('Input Validation', () => {
+    it('should return 400 if locale is missing in PUT request', async () => {
+      const requestBody = {
+        name: 'Nouveau Nom',
+        // locale is missing
+      };
+
+      mockRequest = new NextRequest('http://localhost:3000/api/product/123', {
+        method: 'PUT',
+        body: JSON.stringify(requestBody),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const response = await PUT(mockRequest, { params: { pid: '123' } });
+
+      expect(response.status).toBe(400);
+      const text = await response.text();
+      expect(text).toContain('Locale is required');
+    });
+
+    it('should validate product ID in PUT request', async () => {
+      const requestBody = {
+        locale: 'fr',
+        name: 'Nouveau Nom',
+      };
+
+      mockRequest = new NextRequest('http://localhost:3000/api/product/invalid', {
+        method: 'PUT',
+        body: JSON.stringify(requestBody),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const response = await PUT(mockRequest, { params: { pid: 'invalid' } });
+
+      expect(response.status).toBe(400);
+      const text = await response.text();
+      expect(text).toContain('Invalid product ID');
+    });
+  });
+
   describe('Error Handling', () => {
     it('should handle new API failure gracefully', async () => {
       const requestBody = {
@@ -611,6 +688,48 @@ describe('Product API Route - PUT Handler', () => {
       const response = await PUT(mockRequest, { params: { pid: '123' } });
 
       expect(response.status).toBe(200);
+    });
+  });
+
+  describe('Edge Cases', () => {
+    it('should handle null translation values gracefully', async () => {
+      const requestBody = {
+        locale: 'fr',
+        name: 'Nouveau Nom',
+      };
+
+      mockRequest = new NextRequest('http://localhost:3000/api/product/123', {
+        method: 'PUT',
+        body: JSON.stringify(requestBody),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      mockGraphQLClient.updateProductTranslations.mockResolvedValue({});
+      mockGraphQLClient.getProductTranslations.mockResolvedValue({
+        edges: [{
+          node: {
+            resourceId: 'bc/store/product/123',
+            fields: [
+              { fieldName: 'name', original: 'Product', translation: null }, // null translation
+            ],
+          },
+        }],
+      });
+      mockGraphQLClient.getProductLocaleData.mockResolvedValue({
+        id: 123,
+        basicInformation: { name: 'Product' },
+        seoInformation: {},
+        options: { edges: [] },
+        modifiers: { edges: [] },
+        customFields: { edges: [] },
+      });
+
+      const response = await PUT(mockRequest, { params: { pid: '123' } });
+      const data = await response.json();
+
+      // Should fallback to original when translation is null
+      expect(response.status).toBe(200);
+      expect(data.name).toBe('Product'); // Falls back to original
     });
   });
 

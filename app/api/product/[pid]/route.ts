@@ -763,6 +763,13 @@ export async function GET(request: NextRequest, props: { params: Promise<{ pid: 
   const context = searchParams.get("context") ?? "";
   const channelId = searchParams.get("channel_id") ?? null;
 
+  // Validate product ID
+  if (!pid || isNaN(Number(pid))) {
+    return new Response("Invalid product ID", {
+      status: 400,
+    });
+  }
+
   if (!channelId) {
     return new Response("Channel ID missing", {
       status: 422,
@@ -771,7 +778,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ pid: 
 
   try {
     const { defaultLocale, availableLocales } = await getChannelLocales(context, channelId);
-    const selectedLocale = searchParams.get("locale") ?? (availableLocales?.[1]?.code || availableLocales[0].code);
+    const selectedLocale = searchParams.get("locale") ?? (availableLocales?.[1]?.code || availableLocales?.[0]?.code || defaultLocale);
     const { accessToken, storeHash } = await getSessionFromContext(context);
     const graphQLClient = createGraphQLClient(accessToken, storeHash);
 
@@ -947,6 +954,12 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ pid: 
   if (!channelId) {
     return new Response("Channel ID missing", {
       status: 422,
+    });
+  }
+
+  if (!body.locale) {
+    return new Response("Locale is required", {
+      status: 400,
     });
   }
 
