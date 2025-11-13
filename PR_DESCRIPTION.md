@@ -25,6 +25,7 @@ This PR migrates product translations to use the new [BigCommerce Translations A
    - `getProductTranslations()` - Fetch translations using new API
    - `updateProductTranslations()` - Update translations using new API
    - `deleteProductTranslations()` - Delete translations using new API
+   - `deleteCustomFieldTranslations()` - Delete custom field translations using new API
    - `getChannelLocales()` - Fetch locales using GraphQL
 
 4. **Product API Route Updates** ✅
@@ -35,6 +36,7 @@ This PR migrates product translations to use the new [BigCommerce Translations A
    - **PUT Handler**: Hybrid approach
      - Updates basic fields via new API
      - Deletes basic fields via new API's `deleteTranslations`
+     - Deletes custom fields via new API's `deleteTranslations` with `PRODUCT_CUSTOM_FIELDS`
      - Updates options/modifiers/customFields via old API
      - Complete return data with all fields
 
@@ -47,11 +49,10 @@ This PR migrates product translations to use the new [BigCommerce Translations A
 ### Hybrid Approach
 
 - ✅ **New API**: Basic product fields (name, description, page_title, etc.) - **updates and deletions**
-- ✅ **New API**: Custom fields (PRODUCT_CUSTOM_FIELDS resource type) - **updates only**
+- ✅ **New API**: Custom fields (PRODUCT_CUSTOM_FIELDS resource type) - **updates and deletions**
 - ✅ **New API**: Locales (GraphQL `store.locales` query)
 - ⏸️ **Old API**: Options (will migrate later)
 - ⏸️ **Old API**: Modifiers (will migrate later)
-- ⏸️ **Old API**: Custom field removals (will migrate later)
 
 ### Error Handling
 

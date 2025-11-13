@@ -933,7 +933,7 @@ export * from "./locales.tada"; // NEW
 - **Decision**: Custom fields will use the **new Translations API** with `PRODUCT_CUSTOM_FIELDS` resource type
 - **Implementation**: Query and update custom fields using `store.translations(filters: { resourceType: PRODUCT_CUSTOM_FIELDS, ... })`
 - **Migration**: Custom fields will be migrated from old API to new API
-- **Note**: Custom field removals still use old API for now (will be migrated later)
+- **Note**: Custom field removals now use new API's `deleteTranslations` with `PRODUCT_CUSTOM_FIELDS` resource type
 
 ### Field Removals
 - **Decision**: Basic field removals use the **new API's `deleteTranslations`** mutation
@@ -943,11 +943,10 @@ export * from "./locales.tada"; // NEW
 
 ### Hybrid Approach Summary
 - ✅ **New API**: Basic product fields (name, description, page_title, etc.) - **updates and deletions**
-- ✅ **New API**: Custom fields (PRODUCT_CUSTOM_FIELDS resource type) - **updates only**
+- ✅ **New API**: Custom fields (PRODUCT_CUSTOM_FIELDS resource type) - **updates and deletions**
 - ✅ **New API**: Locales (GraphQL `store.locales` query)
 - ⏸️ **Old API**: Options (will migrate later)
 - ⏸️ **Old API**: Modifiers (will migrate later)
-- ⏸️ **Old API**: Custom field removals (will migrate later)
 
 ### Backward Compatibility
 - Old methods are kept for options/modifiers/customFields

@@ -665,3 +665,25 @@ export function createDeleteProductTranslationsVariables(params: {
     }
   };
 }
+
+// Helper function to create variables for deleting custom field translations
+export function createDeleteCustomFieldTranslationsVariables(params: {
+  channelId: number;
+  locale: string;
+  customFields: Array<{
+    customFieldId: string;
+    fields: string[];
+  }>;
+}) {
+  return {
+    input: {
+      resourceType: "PRODUCT_CUSTOM_FIELDS",
+      channelId: `bc/store/channel/${params.channelId}`,
+      localeId: `bc/store/locale/${params.locale}`,
+      resources: params.customFields.map(field => ({
+        resourceId: `bc/store/product-custom-field/${field.customFieldId}`,
+        fields: field.fields
+      }))
+    }
+  };
+}

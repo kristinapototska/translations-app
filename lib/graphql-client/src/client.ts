@@ -43,6 +43,7 @@ import {
   createGetProductTranslationsVariables,
   createUpdateProductTranslationsVariables,
   createDeleteProductTranslationsVariables,
+  createDeleteCustomFieldTranslationsVariables,
 } from "./queries/product.tada";
 import {
   GetChannelLocalesDocument,
@@ -1258,5 +1259,37 @@ export class GraphQLClient {
       status: edge.node.status,
       is_default: edge.node.isDefault,
     }));
+  }
+
+  // New: Delete custom field translations using new Translations API
+  async deleteCustomFieldTranslations(options: {
+    channelId: number;
+    locale: string;
+    customFields: Array<{
+      customFieldId: string;
+      fields: string[];
+    }>;
+  }) {
+    type Response = ResultOf<typeof DeleteProductTranslationsDocument>;
+    
+    const variables = createDeleteCustomFieldTranslationsVariables({
+      channelId: options.channelId,
+      locale: options.locale,
+      customFields: options.customFields,
+    });
+
+    const response = await this.request<Response>(
+      { query: print(DeleteProductTranslationsDocument) },
+      variables
+    );
+
+    if (response.data?.translation?.deleteTranslations?.errors?.length) {
+      const errors = response.data.translation.deleteTranslations.errors;
+      throw new Error(
+        `Custom field translation deletion failed in locale ${options.locale}: ${errors.map(e => e.message).join(', ')}`
+      );
+    }
+
+    return response.data;
   }
 }

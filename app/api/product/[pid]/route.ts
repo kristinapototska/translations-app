@@ -1081,26 +1081,28 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ pid: 
         }
       }
 
+      // Delete custom fields using new API
+      if (customFieldsToRemove.length > 0) {
+        try {
+          await graphQLClient.deleteCustomFieldTranslations({
+            channelId: Number(channelId),
+            locale: body.locale,
+            customFields: customFieldsToRemove.map(field => ({
+              customFieldId: field.customFieldId,
+              fields: field.fields
+            })),
+          });
+        } catch (error) {
+          console.error(`Failed to delete custom field translations with new API for product ${pid}:`, error);
+          // Continue with other updates - partial update is better than complete failure
+        }
+      }
+
       // Update options/modifiers/customFields with old API (existing code)
-      // Note: Custom fields removals still use old API for now
+      // Note: Custom fields removals now use new API, but updates still use old API
       const graphVariables = {
         channelId: `bc/store/channel/${channelId}`,
         locale: body.locale,
-        ...(customFieldsToRemove.length > 0 && {
-          removedCustomFieldsInput: {
-            productId: `bc/store/product/${pid}`,
-            data: customFieldsToRemove.map(field => ({
-              customFieldId: field.customFieldId,
-              channelLocaleContextData: {
-                context: {
-                  channelId: `bc/store/channel/${channelId}`,
-                  locale: body.locale
-                },
-                attributes: field.fields
-              }
-            }))
-          }
-        }),
         removedOptionsInput: {
           productId: `bc/store/product/${pid}`,
           localeContext: {
