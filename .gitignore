@@ -50,3 +50,8 @@ next-env.d.ts
 
 # Sentry config file
 .env.sentry-build-plugin
+
+# Exclude large files
+product-translation-ui/
+snowflake_metadata.db
+.env

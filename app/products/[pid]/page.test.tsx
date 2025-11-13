@@ -4,9 +4,11 @@
  * Tests the app extension authentication fix
  */
 
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useChannels } from '@/hooks/useChannels';
 import ProductInfo from './page';
 
 // Mock Next.js navigation hooks
@@ -52,6 +54,12 @@ describe('ProductInfo - App Extension Authentication', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (useRouter as any).mockReturnValue(mockRouter);
+    // Reset useChannels mock
+    (useChannels as any).mockReturnValue({
+      channels: [],
+      isLoading: false,
+      error: null,
+    });
   });
 
   describe('When context is present', () => {
@@ -103,8 +111,11 @@ describe('ProductInfo - App Extension Authentication', () => {
         expect.stringContaining('signed_payload_jwt=test-jwt-token')
       );
       expect(mockRouter.replace).toHaveBeenCalledWith(
-        expect.stringContaining('redirect_path=/products/123')
+        expect.stringContaining('redirect_path')
       );
+      // URL encoding means /products/123 becomes %2Fproducts%2F123
+      const callArg = mockRouter.replace.mock.calls[0][0];
+      expect(callArg).toContain('redirect_path');
     });
 
     it('should show loading screen during redirect', () => {

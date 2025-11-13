@@ -1254,7 +1254,7 @@ export class GraphQLClient {
       throw new Error(`Failed to fetch locales for channel ${channelId}`);
     }
 
-    return response.data.store.locales.edges.map((edge: any) => ({
+    return (response.data.store.locales.edges || []).map((edge: any) => ({
       code: edge.node.code,
       status: edge.node.status,
       is_default: edge.node.isDefault,
@@ -1285,8 +1285,9 @@ export class GraphQLClient {
 
     if (response.data?.translation?.deleteTranslations?.errors?.length) {
       const errors = response.data.translation.deleteTranslations.errors;
+      const fieldIds = options.customFields.map(f => f.customFieldId).join(', ');
       throw new Error(
-        `Custom field translation deletion failed in locale ${options.locale}: ${errors.map(e => e.message).join(', ')}`
+        `Custom field translation deletion failed for fields [${fieldIds}] in locale ${options.locale}: ${errors.map(e => e.message).join(', ')}`
       );
     }
 
