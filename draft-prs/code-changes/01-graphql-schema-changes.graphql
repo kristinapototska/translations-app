@@ -1,0 +1,11 @@
+# GraphQL Schema Changes for PR #1
+# File: schema/app-extension.graphql
+
+enum AppExtensionModel {
+  CUSTOMERS
+  ORDERS
+  PRODUCTS
+  PRODUCT_DESCRIPTION
+  CATEGORIES  # NEW - Added to support category-related App Extensions
+}
+

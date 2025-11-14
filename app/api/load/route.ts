@@ -51,37 +51,9 @@ export async function GET(req: NextRequest) {
 
   await setSession(clientToken);
 
-  // Use the path from JWT if available, otherwise try redirect_path param, referer, or root
-  // For app extensions, the JWT should contain the correct path, but we have fallbacks
-  let redirectPath = path;
-  if (!redirectPath || redirectPath === "/") {
-    // First, try to get the redirect_path from query params (set by product page)
-    const redirectPathParam = rUrl.searchParams.get("redirect_path");
-    if (redirectPathParam) {
-      redirectPath = redirectPathParam;
-    } else {
-      // Try to get the original path from referer header
-      const referer = req.headers.get("referer");
-      if (referer) {
-        try {
-          const refererUrl = new URL(referer);
-          redirectPath = refererUrl.pathname;
-        } catch {
-          // If referer parsing fails, use root
-          redirectPath = "/";
-        }
-      } else {
-        redirectPath = "/";
-      }
-    }
-  }
-  
-  // Remove redirect_path from query params before redirecting
-  newSearchParams.delete("redirect_path");
-
   const response = NextResponse.redirect(
     `${process.env.APP_ORIGIN}${buildRedirectUrl(
-      redirectPath,
+      path ?? "/",
       `${clientToken}&${newSearchParams.toString()}`
     )}`,
     {

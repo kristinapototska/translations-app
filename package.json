@@ -15,10 +15,7 @@
     "db:migrate": "NODE_OPTIONS='-r ts-node/register/transpile-only' drizzle-kit migrate",
     "db:push": "NODE_OPTIONS='-r ts-node/register/transpile-only' drizzle-kit push",
     "db:studio": "NODE_OPTIONS='-r ts-node/register/transpile-only' drizzle-kit studio",
-    "generate:schema": "tsx scripts/generate-schema.ts",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "generate:schema": "tsx scripts/generate-schema.ts"
   },
   "dependencies": {
     "@0no-co/graphqlsp": "^1.12.16",
@@ -78,7 +75,6 @@
     "eslint-config-next": "15.1.0",
     "execa": "^9.5.2",
     "fs-extra": "^11.2.0",
-    "jsdom": "^27.2.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.2",
     "typescript": "^5",

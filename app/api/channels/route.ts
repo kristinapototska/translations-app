@@ -1,7 +1,6 @@
 import { type NextRequest } from "next/server";
 import { getSessionFromContext } from "@/lib/auth";
 import { BigCommerceRestClient } from "@bigcommerce/translations-rest-client";
-import { createGraphQLClient } from "@bigcommerce/translations-graphql-client";
 import { fallbackLocale, hardcodedAvailableLocales } from "@/lib/constants";
 import { unstable_cache } from "next/cache";
 
@@ -35,7 +34,6 @@ export async function GET(request: NextRequest) {
       accessToken: accessToken,
       storeHash: storeHash,
     });
-    const graphQLClient = createGraphQLClient(accessToken, storeHash);
 
     const getChannelsData = async (): Promise<ChannelResponse[]> => {
       const { data: channelsData } = await bigcommerce.getAvailableChannels();
@@ -43,9 +41,9 @@ export async function GET(request: NextRequest) {
       const result = await Promise.all(
         channelsData.map(async (channel: Channel) => {
           try {
-            // NEW: Use GraphQL to get locales
-            const localesData = await graphQLClient.getChannelLocales(channel.id);
-            
+            const { data: localesData } = await bigcommerce.getChannelLocales(
+              channel.id
+            );
             const locales: Locale[] = localesData.map(
               (locale: {
                 code: string;
